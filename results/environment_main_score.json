@@ -1,0 +1,12 @@
+{
+  "python": "3.13.18",
+  "platform": "Linux-6.18.44-fc-v310-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "cpu_count": 2,
+  "peak_rss_mb": 2103.015625,
+  "wall_seconds": 736.9607445800002,
+  "numpy": "2.5.3",
+  "pandas": "3.0.5",
+  "sklearn": "1.9.1",
+  "scipy": "1.18.1"
+}

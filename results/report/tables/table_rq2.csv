@@ -1,0 +1,6 @@
+m,n_known,n_unknown_bot,n_benign,AttribIQ: top-1,AttribIQ: AUROC vs benign,AttribIQ: AUROC vs unknown-family bots,AttribIQ: recall@FAR1%,AttribIQ: false attr. unknown bots@FAR1%,AttribIQ: false attr. benign@FAR1%,Original weights: top-1,Original weights: AUROC vs benign,Original weights: AUROC vs unknown-family bots,Original weights: recall@FAR1%,Original weights: false attr. unknown bots@FAR1%,Original weights: false attr. benign@FAR1%,AttribIQ p>=0.5: known attributed,AttribIQ p>=0.5: benign attributed
+1.0,60,75,5620,1.0,0.985,1.0,0.917,0.0,0.0133,1.0,1.0,1.0,1.0,0.0,0.0133,0.0,0.0
+0.5,65,75,5480,0.923,0.755,0.645,0.138,0.0,0.015,0.923,0.736,0.705,0.138,0.0,0.0119,0.0,0.0
+0.2,65,75,5480,0.692,0.607,0.546,0.0,0.0,0.0124,0.662,0.562,0.557,0.031,0.0,0.0099,0.0,0.0053
+0.1,65,75,5480,0.492,0.504,0.35,0.031,0.027,0.0142,0.462,0.468,0.385,0.031,0.0,0.0119,0.0,0.0036
+0.05,65,75,5480,0.646,0.587,0.495,0.031,0.0,0.0144,0.585,0.532,0.509,0.0,0.0,0.0113,0.0,0.0113

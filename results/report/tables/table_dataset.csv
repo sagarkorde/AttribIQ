@@ -1,0 +1,7 @@
+Scenario,Family,Flows,Internal-source flows,Duration (h),Internal hosts,Eligible hosts (>=10 flows),Infected hosts (eligible/all),Normal-labelled hosts (eligible)
+5,Virut,129832,94758,0.5,254,134,1/1,4
+7,Sogou,114077,86246,0.35,294,148,1/1,4
+9,Neris,2087508,1468826,5.19,398,276,10/10,5
+10,Rbot,1309791,1005373,4.76,413,286,10/10,6
+11,Rbot,107251,72646,0.27,272,125,2/3,3
+12,NSIS.ay,325471,242419,1.23,303,182,3/3,4

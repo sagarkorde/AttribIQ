@@ -1,0 +1,15 @@
+variant,1.0,0.5,0.2,0.1,0.05
+AttribIQ (all four lines),0.96,0.704,0.329,0.246,0.203
+E_inf as inf_cos,1.0,0.764,0.325,0.238,0.197
+E_inf as inf_dot2,0.96,0.712,0.333,0.249,0.204
+E_inf as inf_ext,0.96,0.671,0.276,0.189,0.166
+E_inf as inf_noidf,0.96,0.693,0.324,0.234,0.194
+E_inf as inf_pooled,0.96,0.705,0.332,0.249,0.205
+aggregation: Fisher combination,1.0,0.772,0.292,0.184,0.166
+aggregation: maximum percentile,1.0,0.563,0.191,0.103,0.102
+aggregation: mean without lowest line,1.0,0.751,0.305,0.199,0.183
+aggregation: median of percentiles,1.0,0.735,0.3,0.202,0.188
+without E_flow,0.928,0.667,0.338,0.272,0.225
+without E_inf,0.942,0.664,0.292,0.208,0.164
+without E_stat,0.93,0.71,0.261,0.179,0.129
+without E_tmp,1.0,0.666,0.32,0.231,0.232
