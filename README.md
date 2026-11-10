@@ -34,10 +34,15 @@ attribiq/            library
   baselines.py       original AttribIQ pipeline, HDBSCAN co-membership
   metrics.py         AP, AUROC, Brier, ECE, bootstrap intervals
   experiments.py     T1 and T2 protocols with leave-one-family-out fitting
+  graph.py           random-walk-with-restart baseline, rare-destination candidate pruning (revision)
+  revision.py        held-out incident, session-aware blending, reference-population and scaling runs (revision)
 scripts/
   fetch_data.py      download and verify the six CTU-13 flow files
   run_experiments.py all experiments (stages main, score, extras, replicate)
-  make_report.py     every table, figure and number of the paper
+  make_report.py     every table, figure and number of the first manuscript
+  run_revision.py    experiments added in the revision (stages heldout, graph, session, contam, scale)
+  make_revision_report.py  analyses of the revision: scenario-level bootstrap, nested selection,
+                     tuned baselines, calibration diagnostics, held-out linkage, pruning, scaling
 tests/               unit tests (pytest)
 data/SHA256SUMS      checksums of the exact flow files used
 results/             per-condition results, report/tables, report/figures, report/numbers.json
@@ -72,8 +77,13 @@ scenario 5 matches a second mirror record for record; scenario 7 comes from one 
 ```bash
 python scripts/run_experiments.py --raw data/raw --cache data/cache --out results
 python scripts/make_report.py --results results --raw data/raw --cache data/cache
+python scripts/run_revision.py --raw data/raw --cache data/cache --out results
+python scripts/make_revision_report.py --results results
 python -m pytest -q
 ```
+
+The revision stages took about 41 minutes on the same machine;
+`results/report/revision/revision_numbers.json` holds every number of the conference version.
 
 The first command runs all stages and resumes if interrupted (`--force` recomputes). On a
 2-vCPU virtual machine the main experiment (5 malicious shares × 5 repetitions × 6 scenarios,
@@ -121,11 +131,37 @@ probability 0.105 | 0.115 | 0.113 | 0.120 | 0.118.
 Cross-incident linkage works without blending and fails for every method under heavy
 blending, where AttribIQ abstains rather than misattributes.
 
+## Design freeze and held-out evaluation
+
+All method choices (evidence lines, parameters, percentile fusion, calibration, thresholds)
+were frozen at commit `98637ce` before CTU-13 scenario 2 was obtained. The method modules
+are unchanged since; this can be checked with
+
+```bash
+git diff 98637ce -- attribiq/profiles.py attribiq/evidence.py attribiq/fusion.py attribiq/combine.py attribiq/experiments.py
+```
+
+Scenario 2 (Neris, one infected host; SHA-256 equal to the official archive checksum listed
+in two independent public manifests, see `attribiq/scenarios.py`) is used only for held-out
+cross-incident linkage. It adds a second recurring family (Neris: scenarios 2 and 9).
+
+Main findings of the revision analyses:
+
+* Scenario-level 95% intervals (two-stage bootstrap) exclude zero for AttribIQ versus the
+  original weights at 20% and 10% malicious share, but not versus HDBSCAN or the tuned random walk.
+* Nested leave-one-scenario-out selection over 239 design variants gives
+  0.147 AP at 20% (fixed design 0.329): choosing designs on these
+  scenarios overfits.
+* Session-aware blending lowers AttribIQ to 0.223 at 20% because temporal co-activity
+  stops being informative; the three other lines are unaffected.
+* Over seven incidents, cross-incident linkage works only without blending and for Rbot; on the
+  held-out incident the 1% false-attribution threshold admitted 1.9–3.2% of benign hosts.
+
 ## Limitations
 
 The evidence lines, parameters and aggregation rule were developed on the same six
 scenarios (no held-out scenario); the captures are from 2011; only one family (Rbot)
-occurs in two incidents, so T2 rests on 12–13 known-family queries per repetition; the
+occurs in two of the six development incidents (Neris recurs only with the held-out scenario 2); the
 blending model overlays traffic uniformly. See the paper's threats-to-validity section.
 
 ## Licence

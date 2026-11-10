@@ -1,0 +1,13 @@
+{
+ "python": "3.13.18",
+ "platform": "Linux-6.18.44-fc-v338-x86_64-with-glibc2.39",
+ "wall_seconds": 2085.2,
+ "peak_rss_mb": 2189.8,
+ "stages": [
+  "heldout",
+  "graph",
+  "session",
+  "contam",
+  "scale"
+ ]
+}

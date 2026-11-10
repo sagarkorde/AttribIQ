@@ -22,10 +22,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from attribiq.data import sha256_of  # noqa: E402
-from attribiq.scenarios import PAPER_SCENARIOS, SCENARIOS  # noqa: E402
+from attribiq.scenarios import HELDOUT_SCENARIOS, PAPER_SCENARIOS, SCENARIOS  # noqa: E402
 
 LFS = "https://media.githubusercontent.com/media"
 MIRRORS = {
+    2: [f"{LFS}/ahmdzzzki/botnet-detection-deep-learning/main/data/2/capture20110811.binetflow"],
     5: [f"https://raw.githubusercontent.com/Awadnawafleh/ctu13/main/capture20110815-2.binetflow"],
     7: [f"https://raw.githubusercontent.com/mincuties/Botnet-Netflow-Scenario-Analyzer/main/data/scenarios/scenario07.binetflow.gz"],
     9: [f"{LFS}/kbaran1998/CS4035-cyber-data/main/lab3/data/dataset_9/capture20110817.binetflow",
@@ -65,7 +66,7 @@ def main() -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     ok = True
-    for sid in PAPER_SCENARIOS:
+    for sid in tuple(PAPER_SCENARIOS) + tuple(HELDOUT_SCENARIOS):
         sc = SCENARIOS[sid]
         dest = out / sc.filename
         if dest.exists() and sha256_of(dest) == sc.sha256:

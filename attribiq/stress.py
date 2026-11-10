@@ -64,3 +64,37 @@ def truncate(flows: pd.DataFrame, roles: pd.Series, minutes: float) -> pd.DataFr
     src = flows["src"].astype(str)
     start = flows.loc[src.isin(bots), "ts"].min()
     return flows[(flows["ts"] >= start) & (flows["ts"] < start + 60.0 * minutes)].reset_index(drop=True)
+
+
+def blend_session(flows: pd.DataFrame, roles: pd.Series, malicious_fraction: float,
+                  rng: np.random.Generator, min_benign_flows: int = 50, bin_seconds: int = 60
+                  ) -> tuple[pd.DataFrame, pd.Series, dict[str, str]]:
+    """Session-aware blending (added for the revision; evaluation only).
+
+    Same partners and subsampling as :func:`blend` (identical random draws), but
+    every malicious flow is then moved into the nearest minute in which the absorbed
+    benign host was active, keeping its offset within the minute. The malware thus
+    only communicates while the user is active, as malware that piggybacks on user
+    sessions would, and its timing follows the user rather than the botnet.
+    """
+    f, r, mapping = blend(flows, roles, malicious_fraction, rng, min_benign_flows)
+    if not mapping:
+        return f, r, mapping
+    ts = f["ts"].to_numpy(dtype=float).copy()
+    src = f["src"].to_numpy(dtype=object)
+    role = f["role"].to_numpy(dtype=object)
+    t0 = float(ts.min())
+    for b in mapping:
+        ib = np.flatnonzero(src == b)
+        mal, ben = ib[role[ib] == "bot"], ib[role[ib] != "bot"]
+        if len(mal) == 0 or len(ben) == 0:
+            continue
+        act = np.unique(np.floor((ts[ben] - t0) / bin_seconds))
+        mb = np.floor((ts[mal] - t0) / bin_seconds)
+        pos = np.clip(np.searchsorted(act, mb), 0, len(act) - 1)
+        left = act[np.clip(pos - 1, 0, len(act) - 1)]
+        right = act[pos]
+        target = np.where(np.abs(mb - left) <= np.abs(right - mb), left, right)
+        ts[mal] = ts[mal] + (target - mb) * bin_seconds
+    f = f.assign(ts=ts).sort_values("ts", kind="stable").reset_index(drop=True)
+    return f, r, mapping
