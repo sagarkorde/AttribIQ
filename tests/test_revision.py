@@ -32,3 +32,14 @@ def test_rare_destination_pruning_finds_shared_c2(toy_flows):
     cand, score = rare_destination_candidates(bipartite(toy_flows, hosts), k=2, cap=2)
     i, j = hosts.index("147.32.84.165"), hosts.index("147.32.84.191")
     assert j in cand[i] and i in cand[j]
+
+
+def test_conformal_threshold_controls_false_attribution():
+    from attribiq.conformal import conformal_threshold, min_labelled
+    rng = np.random.default_rng(0)
+    assert min_labelled(0.01) == 99 and np.isinf(conformal_threshold(rng.random(98), 0.01))
+    far = []
+    for _ in range(2000):
+        cal, test = rng.random(200), rng.random(500)
+        far.append((test > conformal_threshold(cal, 0.05)).mean())
+    assert np.mean(far) <= 0.05 + 0.005           # marginal guarantee (exchangeable scores)

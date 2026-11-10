@@ -35,14 +35,16 @@ attribiq/            library
   metrics.py         AP, AUROC, Brier, ECE, bootstrap intervals
   experiments.py     T1 and T2 protocols with leave-one-family-out fitting
   graph.py           random-walk-with-restart baseline, rare-destination candidate pruning (revision)
-  revision.py        held-out incident, session-aware blending, reference-population and scaling runs (revision)
+  revision.py        held-out incident, session-aware blending, partner-pool, reference-population and scaling runs (revision)
+  conformal.py       split-conformal false-attribution threshold set on an incident's own labelled hosts
 scripts/
   fetch_data.py      download and verify the six CTU-13 flow files
   run_experiments.py all experiments (stages main, score, extras, replicate)
   make_report.py     every table, figure and number of the first manuscript
-  run_revision.py    experiments added in the revision (stages heldout, graph, session, contam, scale)
+  run_revision.py    experiments added in the revision (stages heldout, graph, session, contam, scale, partner)
   make_revision_report.py  analyses of the revision: scenario-level bootstrap, nested selection,
-                     tuned baselines, calibration diagnostics, held-out linkage, pruning, scaling
+                     tuned baselines, calibration diagnostics incl. isotonic recalibration, review budgets
+                     (precision/recall at k), held-out linkage, per-incident conformal thresholds, pruning, scaling
 tests/               unit tests (pytest)
 data/SHA256SUMS      checksums of the exact flow files used
 results/             per-condition results, report/tables, report/figures, report/numbers.json
@@ -156,6 +158,13 @@ Main findings of the revision analyses:
   stops being informative; the three other lines are unaffected.
 * Over seven incidents, cross-incident linkage works only without blending and for Rbot; on the
   held-out incident the 1% false-attribution threshold admitted 1.9–3.2% of benign hosts.
+* With heavier benign partners (at least 1,000 flows) every method gains and AttribIQ's lead
+  disappears (0.528 vs 0.545 for the original weights at 20%).
+* A split-conformal threshold set on 100 labelled non-infected hosts of the incident itself brings the
+  mean false-attribution rate back to 0.010 (95th percentile over draws 0.038) at a cost in
+  recall; at least 99 labelled hosts are needed for a 1% target.
+* Isotonic recalibration fitted on other families does not repair calibration among predictions with
+  p >= 0.1.
 
 ## Limitations
 

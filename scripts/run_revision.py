@@ -7,6 +7,7 @@ Stages
   session   session-aware blending (malicious flows move into the user's active minutes)
   contam    smaller reference populations (fewer non-infected hosts)
   scale     cost of exhaustive versus pruned scoring for growing host counts
+  partner   blending with heavier benign partners (at least 200 or 1000 flows)
 
 Usage:
   python scripts/run_revision.py --raw data/raw --cache data/cache --out results
@@ -37,7 +38,7 @@ def main() -> None:
     ap.add_argument("--raw", default="data/raw")
     ap.add_argument("--cache", default="data/cache")
     ap.add_argument("--out", default="results")
-    ap.add_argument("--stages", default="heldout,graph,session,contam,scale")
+    ap.add_argument("--stages", default="heldout,graph,session,contam,scale,partner")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
     out = Path(args.out) / "revision"
@@ -62,7 +63,7 @@ def main() -> None:
         pd.concat(parts, ignore_index=True).to_parquet(out / "t2_heldout_decisions.parquet")
         del F, R
 
-    if {"graph", "session", "contam"} & set(stages):
+    if {"graph", "session", "contam", "partner"} & set(stages):
         cm = replace(cfg, scenarios=cfg.multi)
         F, R = load_all(cm)
         if "graph" in stages and todo("t1_graph_pruning.parquet"):
@@ -92,6 +93,15 @@ def main() -> None:
                         print(f"contam m={m} rep={rep} keep={keep} {time.perf_counter() - t:.0f}s", flush=True)
             pairs = RV.frozen_scores(pd.concat(parts, ignore_index=True), main_pairs)
             pairs.to_parquet(out / "t1_contamination_pairs.parquet")
+        if "partner" in stages and todo("t1_partner_pairs.parquet"):
+            parts = []
+            for mf in (200, 1000):
+                for rep in range(3):
+                    t = time.perf_counter()
+                    parts.append(RV.partner_sensitivity(cm, F, R, 0.2, rep, mf))
+                    print(f"partner min_flows={mf} rep={rep} {time.perf_counter() - t:.0f}s", flush=True)
+            pairs = RV.frozen_scores(pd.concat(parts, ignore_index=True), main_pairs)
+            pairs.to_parquet(out / "t1_partner_pairs.parquet")
         del F, R
 
     if "scale" in stages and todo("scaling.csv"):

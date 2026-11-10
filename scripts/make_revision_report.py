@@ -32,6 +32,7 @@ from scipy.stats import wilcoxon  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from attribiq import metrics as M  # noqa: E402
+from attribiq.conformal import conformal_threshold, min_labelled  # noqa: E402
 from attribiq.experiments import FAMILY  # noqa: E402
 from attribiq.scenarios import HELDOUT_SCENARIOS, PAPER_SCENARIOS  # noqa: E402
 
@@ -431,8 +432,114 @@ def main() -> None:
         t2[key(m)]["p_top_ece"] = M.ece(corr.to_numpy(), allq["p_top"].to_numpy())
         t2[key(m)]["p_top_mean_known"] = float(cal_ok["p_top"].mean())
     NUM["t2_extended"] = t2
+
+    # per-incident split-conformal thresholds: a labelled sample of the incident's own
+    # non-infected hosts sets the threshold; evaluated on the incident's other hosts
+    rng = np.random.default_rng(11)
+    conf = {}
+    for eps in (0.01, 0.05):
+        for n_cal in (50, 100, 150):
+            for m in FR:
+                q = d[d.m == m]
+                rows_far, rows_rec, rows_ho, rows_ho_rec, n_inc = [], [], [], [], set()
+                for (sid_, rep), g_ in q.groupby(["sid", "rep"]):
+                    ben = g_[g_.role != "bot"]["S3_top_score"].to_numpy()
+                    kn = g_[g_.kind == "bot_known_family"]
+                    if len(ben) < n_cal + 50:
+                        continue
+                    n_inc.add(int(sid_))
+                    for _ in range(100):
+                        perm = rng.permutation(len(ben))
+                        tau = conformal_threshold(ben[perm[:n_cal]], eps)
+                        far = float((ben[perm[n_cal:]] > tau).mean())
+                        rows_far.append(far)
+                        if int(sid_) in HELDOUT_SCENARIOS:
+                            rows_ho.append(far)
+                        if len(kn):
+                            ok = ((kn["S3_top_score"] > tau) & (kn["S3_top_family"] == kn["truth"])).mean()
+                            rows_rec.append(float(ok))
+                            if int(sid_) in HELDOUT_SCENARIOS:
+                                rows_ho_rec.append(float(ok))
+                conf.setdefault(str(eps), {}).setdefault(str(n_cal), {})[key(m)] = {
+                    "far_mean": float(np.mean(rows_far)) if rows_far else None,
+                    "far_p95": float(np.quantile(rows_far, 0.95)) if rows_far else None,
+                    "recall_mean": float(np.mean(rows_rec)) if rows_rec else None,
+                    "heldout_far_mean": float(np.mean(rows_ho)) if rows_ho else None,
+                    "heldout_far_p95": float(np.quantile(rows_ho, 0.95)) if rows_ho else None,
+                    "incidents": sorted(n_inc)}
+    NUM["t2_conformal"] = conf
+    NUM["t2_conformal_min_labelled"] = {"0.01": min_labelled(0.01), "0.05": min_labelled(0.05)}
+    NUM["t2_benign_per_incident"] = {str(int(s_)): float(g_.groupby("rep").apply(lambda z: (z.role != "bot").sum(), include_groups=False).mean())
+                                     for s_, g_ in d[d.m == 1.0].groupby("sid")}
     NUM["t2_counts"] = {"queries_per_condition": int(len(d[(d.m == 1.0)]) / d.rep.nunique()),
                         "incidents": sorted(int(s) for s in d["sid"].unique())}
+
+    # ------------------------------------------------------------------ analyst budget: precision@k and recall@k
+    def topk_hits(y: np.ndarray, sc: np.ndarray, k_: int) -> float:
+        """Expected related hosts among the top k under random tie-breaking."""
+        o = np.argsort(-sc, kind="mergesort")
+        s_sorted, y_sorted = sc[o], y[o]
+        if k_ >= len(sc):
+            return float(y.sum())
+        thr = s_sorted[k_ - 1]
+        above = s_sorted > thr
+        tie = s_sorted == thr
+        return float(y_sorted[above].sum() + (k_ - above.sum()) * y_sorted[tie].mean())
+
+    budget = {}
+    for m in FR:
+        q = p[p.m == m]
+        budget[key(m)] = {}
+        for c in ["S", "v1_weights", "rwr_best", "hdbscan", "p_logreg"]:
+            col = rwr_best if c == "rwr_best" else c
+            rec, prec = {}, {}
+            for k_ in (5, 10, 20):
+                h = [topk_hits(g["y"].to_numpy(float), g[col].to_numpy(float), k_) for _, g in q.groupby(UNIT)]
+                npos = [g["y"].sum() for _, g in q.groupby(UNIT)]
+                rec[str(k_)] = float(np.mean(np.array(h) / np.array(npos)))
+                prec[str(k_)] = float(np.mean(np.array(h) / k_))
+            budget[key(m)][c] = {"recall": rec, "precision": prec}
+        budget[key(m)]["related_per_seed"] = float(q.groupby(UNIT)["y"].sum().mean())
+        budget[key(m)]["candidates_per_seed"] = float(q.groupby(UNIT).size().mean())
+    NUM["analyst_budget"] = budget
+
+    # ------------------------------------------------------------------ isotonic recalibration (leave-one-family-out)
+    from sklearn.isotonic import IsotonicRegression
+    iso = np.full(len(p), np.nan)
+    for s_ in sids:
+        test = (p["sid"] == s_).to_numpy()
+        train = (p["sid"].map(FAMILY) != FAMILY[s_]).to_numpy()
+        ir = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1).fit(p.loc[train, "S"], p.loc[train, "y"])
+        iso[test] = ir.predict(p.loc[test, "S"])
+    p["p_isotonic"] = iso
+    isoc = {}
+    for m in FR:
+        q = p[p.m == m]
+        y = q["y"].to_numpy()
+        for c in ["p_attribiq", "p_isotonic"]:
+            pr_ = q[c].clip(0, 1).to_numpy()
+            hi = pr_ >= 0.1
+            isoc.setdefault(key(m), {})[c] = {"ece": M.ece(y, pr_), "ece_hi_range": M.ece(y[hi], pr_[hi]) if hi.sum() >= 50 else None,
+                                              "share_hi_range": float(hi.mean()), "brier": M.brier(y, pr_)}
+    NUM["isotonic"] = isoc
+
+    # ------------------------------------------------------------------ is the fixed design an outlier in any scenario?
+    rank = {}
+    for m in FR:
+        rank[key(m)] = {}
+        for s_ in sids:
+            vals = np.array([design[n][m][design[n][m].index.get_level_values("sid") == s_].mean() for n in design])
+            f_ = design[fixed][m][design[fixed][m].index.get_level_values("sid") == s_].mean()
+            rank[key(m)][str(int(s_))] = float((vals <= f_ + 1e-12).mean())
+    NUM["fixed_design_percentile_by_scenario"] = rank
+
+    # ------------------------------------------------------------------ partner-pool sensitivity of blending
+    pp = pd.read_parquet(RV / "t1_partner_pairs.parquet")
+    base3 = p[(p.m == 0.2) & (p.rep < 3)]
+    part = {"50": {c: float(unit_ap(base3, c).mean()) for c in ["S", "v1_weights", "p_logreg", "hdbscan"]}}
+    for mf, q in pp.groupby("partner_min_flows"):
+        part[str(int(mf))] = {c: float(unit_ap(q, c).mean()) for c in ["S", "v1_weights", "p_logreg", "hdbscan"]}
+    NUM["partner_pool"] = part
 
     # ------------------------------------------------------------------ tables
     rows = []
@@ -450,7 +557,7 @@ def main() -> None:
     xs = np.arange(len(FR))
     lab = ["100%", "50%", "20%", "10%", "5%"]
     # Fig. 1: T1 average precision (single column)
-    fig, ax = plt.subplots(figsize=(3.45, 2.35))
+    fig, ax = plt.subplots(figsize=(3.45, 2.05))
     lines = [("S", "AttribIQ", SERIES[0], "o"), ("v1_weights", "Original weights", SERIES[1], "s"),
              ("p_logreg", "Learned logistic", SERIES[2], "^"), ("hdbscan", "HDBSCAN", SERIES[3], "D"),
              ("rwr_best", "Random walk (tuned)", SERIES[4], "v")]
@@ -467,7 +574,7 @@ def main() -> None:
     ax.set_ylabel("Average precision (T1)", color=INK)
     ax.set_xlabel("Malicious share of an infected host's traffic", color=INK)
     style(ax)
-    ax.legend(fontsize=5.8, frameon=False, loc="upper right", handlelength=2.4, ncol=1)
+    ax.legend(fontsize=5.4, frameon=False, loc="upper right", handlelength=2.2, ncol=1, labelspacing=0.25)
     fig.savefig(out / "figures" / "fig1_t1.png", dpi=300, bbox_inches="tight")
     plt.close(fig)
     # Fig. 2: (a) T2 over seven incidents, (b) calibration in the informative range

@@ -190,3 +190,17 @@ def scaling(cfg: Config, flows_all: pd.DataFrame, sizes: list[int], k: int = 50,
                     "pruned_pairs": n_pairs})
         out.append(row)
     return out
+
+
+def partner_sensitivity(cfg: Config, F: dict, R: dict, m: float, rep: int, min_benign_flows: int) -> pd.DataFrame:
+    """Blending with a different partner pool: only benign hosts with at least
+    ``min_benign_flows`` flows (heavier users) are absorbed by infected hosts."""
+    flows, roles0 = {}, {}
+    for s in cfg.multi:
+        f, r, _ = blend(F[s], R[s], m, _rng(cfg, m, rep, s), min_benign_flows=min_benign_flows)
+        flows[s], roles0[s] = f, r
+    P, roles = _profiles(cfg, flows, roles0, cfg.multi)
+    pairs = rq1_pairs(cfg, P, roles, flows, m, rep, with_variants=False, with_v1=False)
+    if len(pairs):
+        pairs["partner_min_flows"] = min_benign_flows
+    return pairs
